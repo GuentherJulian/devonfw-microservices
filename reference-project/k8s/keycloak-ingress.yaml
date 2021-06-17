@@ -15,5 +15,5 @@ spec:
               service:
                 name: keycloak
                 port:
-                  number: 8085
+                  number: 8080
       host: keycloak-demo-quarkus.localhost
