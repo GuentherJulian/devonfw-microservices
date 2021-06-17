@@ -3,12 +3,16 @@ package com.devonfw.application.quarkus.sample.animalmanagement.service.impl.res
 import java.util.List;
 import java.util.Random;
 
+import javax.annotation.security.PermitAll;
+import javax.annotation.security.RolesAllowed;
+import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
 import javax.transaction.Transactional;
 import javax.ws.rs.BeanParam;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
+import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -17,10 +21,12 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.UriBuilder;
 import javax.ws.rs.core.UriInfo;
 
 import org.eclipse.microprofile.faulttolerance.Retry;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
@@ -41,6 +47,7 @@ import lombok.extern.slf4j.Slf4j;
 
 //In Quarkus all JAX-RS resources are treated as CDI beans
 //default is Singleton scope
+@RequestScoped
 @Path("/animals")
 // how we serialize response
 @Produces(MediaType.APPLICATION_JSON)
@@ -60,6 +67,9 @@ public class AnimalRestController {
   // using @Context we can inject contextual info from JAXRS(e.g. http request, current uri info, endpoint info...)
   @Context
   UriInfo uriInfo;
+  
+  @Inject
+  JsonWebToken jwt; 
 
   // endpoint to simulate error - will be transformed by exceptionMapper in tkit-rest
   @GET
@@ -69,6 +79,7 @@ public class AnimalRestController {
     throw new NotFoundException("Test not found exception");
   }
 
+  @PermitAll
   @APIResponses({
   @APIResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(type = SchemaType.ARRAY, implementation = Animal.class))),
   @APIResponse(responseCode = "500") })
@@ -77,7 +88,7 @@ public class AnimalRestController {
   // add explicit counter to metrics
   @Counted(description = "Counter of REST getAll Animals")
   // We did not define custom @Path - so it will use class level path
-  public Response getAll(@BeanParam AnimalSearchCriteriaDTO dto) {
+  public Response getAll(@BeanParam AnimalSearchCriteriaDTO dto, @Context SecurityContext ctx) {
 
     // we simply return list of entities
     // in more complex models this might fail(e.g. bidirectional...)
@@ -148,6 +159,49 @@ public class AnimalRestController {
   public List<String> getAnimalFacts(@PathParam("id") String id) {
 
     return getFactsFromUnreliableSource(id);
+  }
+
+  @GET()
+  @Path("permit-all")
+  @PermitAll 
+  @Produces(MediaType.TEXT_PLAIN)
+  public String hello(@Context SecurityContext ctx) {
+      return getResponseString(ctx); 
+  }
+  
+  @GET
+  @Path("roles-allowed") 
+  @RolesAllowed({ "user", "admin" }) 
+  @Produces(MediaType.TEXT_PLAIN)
+  public String helloRolesAllowed(@Context SecurityContext ctx) {
+      return getResponseString(ctx) + ", birthdate: " + jwt.getClaim("birthdate").toString(); 
+  }
+
+  private String getResponseString(SecurityContext ctx) {
+      String name;
+      if (ctx.getUserPrincipal() == null) { 
+          name = "anonymous";
+      } else if (!ctx.getUserPrincipal().getName().equals(jwt.getName())) { 
+          throw new InternalServerErrorException("Principal and JsonWebToken names do not match");
+      } else {
+          name = ctx.getUserPrincipal().getName(); 
+      }
+      StringBuilder s = new StringBuilder();
+      s.append(String.format("hello + %s,"
+              + " isHttps: %s,"
+              + " authScheme: %s,"
+              + " hasJWT: %s",
+              name, ctx.isSecure(), ctx.getAuthenticationScheme(), hasJwt()));
+      s.append("\n");
+      s.append(jwt.getIssuer() + "\n" + jwt.getTokenID() + "\n" + jwt.getRawToken() + "\n");
+      for(String claim : jwt.getClaimNames()) {
+    	  s.append(claim + ": " + jwt.getClaim(claim).toString());
+      }
+      return s.toString(); 
+  }
+
+  private boolean hasJwt() {
+	return jwt.getClaimNames() != null;
   }
 
   private List<String> getFactsFromUnreliableSource(String id) {

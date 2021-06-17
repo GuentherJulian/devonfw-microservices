@@ -35,6 +35,20 @@ spec:
               value: demo
             - name: QUARKUS_DATASOURCE_PASSWORD
               value: demo
+            - name: QUARKUS_OIDC_AUTH_SERVER_URL
+              value: http://keycloak:8080/auth/realms/quarkus
+            - name: QUARKUS_OIDC_CLIENT_ID
+              value: frontend
+            - name: QUARKUS_OIDC_APPLICATION_TYPE
+              value: web-app
+            - name: QUARKUS_HTTP_AUTH_PERMISSION_AUTHENTICATED_PATHS
+              value: /*
+            - name: QUARKUS_HTTP_AUTH_PERMISSION_AUTHENTICATED_POLICY
+              value: authenticated
+            - name: QUARKUS_OIDC_TOKEN_ISSUER
+              value: http://keycloak-demo-quarkus.localhost/auth/realms/quarkus
+
+              
           # live & ready probes, using our healthcheck endpoints
           livenessProbe:
             failureThreshold: 5
